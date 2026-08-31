@@ -1,0 +1,27 @@
+includes:
+	- vendor/szepeviktor/phpstan-wordpress/extension.neon
+parameters:
+	level: max
+	paths:
+		- src
+		- stateflow.php
+		- bin/lint.php
+		- tests
+	excludePaths:
+		analyseAndScan:
+			- tools
+			- vendor
+			# Test fixtures: the FeaturesUtil stub clashes with the real
+			# woocommerce-stubs (both define the class; analysis of a fixture
+			# against the real stub produces false positives).
+			- tests/stubs
+			# Integration tests extend WP-core suite classes (WP_UnitTestCase)
+			# that only exist inside a real WordPress test environment.
+			- tests/Integration
+	scanFiles:
+		- vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+	ignoreErrors:
+		-
+			message: '#Access to an undefined static property Automattic\\WooCommerce\\Utilities\\FeaturesUtil::\$calls#'
+			path: tests
+	treatPhpDocTypesAsCertain: false
