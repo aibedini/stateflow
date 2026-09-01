@@ -122,7 +122,11 @@ jobs:
           mkdir -p "$WP_SRC_DIR/wp-content/plugins"
           unzip -q /tmp/wc.zip -d "$WP_SRC_DIR/wp-content/plugins/"
           cp -r "$GITHUB_WORKSPACE" "$WP_SRC_DIR/wp-content/plugins/stateflow"
-          rm -rf "$WP_SRC_DIR/wp-content/plugins/stateflow/.git"
+          rm -rf "$WP_SRC_DIR/wp-content/plugins/stateflow/.git" "$WP_SRC_DIR/wp-content/plugins/stateflow/vendor"
+          # Mirrors a released package (no dev vendor/): the installed copy
+          # uses the plugin's PSR-4 fallback autoloader, while the phpunit
+          # process uses the workspace composer autoloader — two different
+          # ComposerAutoloaderInit class names, no redeclare collision.
           echo "STATEFLOW_WC_PLUGIN_FILE=$WP_SRC_DIR/wp-content/plugins/woocommerce/woocommerce.php" >> "$GITHUB_ENV"
           echo "STATEFLOW_BOOTSTRAP_FILE=$WP_SRC_DIR/wp-content/plugins/stateflow/stateflow.php" >> "$GITHUB_ENV"
 
