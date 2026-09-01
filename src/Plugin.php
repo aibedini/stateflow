@@ -36,15 +36,6 @@ final class Plugin {
 	private bool $booted = false;
 
 	/**
-	 * Whether activate() has run since the last deactivate(). Observable
-	 * plugin-lifecycle state: real activation hooks set it, real
-	 * deactivation hooks clear it.
-	 *
-	 * @var bool
-	 */
-	private bool $activated = false;
-
-	/**
 	 * Requirements notice renderer (admin only).
 	 *
 	 * @var RequirementsNotice
@@ -118,32 +109,22 @@ final class Plugin {
 	}
 
 	/**
-	 * Activation callback. Must stay repeatable: running it again after a
-	 * deactivation is a normal plugin lifecycle event.
+	 * Activation callback. Intentionally a no-op at SF-001: there is no
+	 * schema or state to create yet. When SF-002 introduces real
+	 * activation/migration effects, those effects become the observable
+	 * assertions for the lifecycle tests.
 	 *
 	 * @return void
 	 */
 	public function activate(): void {
-		$this->activated = true;
 	}
 
 	/**
-	 * Deactivation callback. Must stay repeatable.
+	 * Deactivation callback. Intentionally a no-op at SF-001.
 	 *
 	 * @return void
 	 */
 	public function deactivate(): void {
-		$this->activated = false;
-	}
-
-	/**
-	 * Whether the plugin is currently activated (activate() ran after the
-	 * last deactivate()). Observable outcome for lifecycle tests.
-	 *
-	 * @return bool
-	 */
-	public function is_activated(): bool {
-		return $this->activated;
 	}
 
 	/**

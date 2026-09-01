@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+#
+# Vendored dependency provenance (do not lose this block):
+#
+# Upstream repository: https://github.com/wp-cli/sample-plugin
+# Upstream path:       bin/install-wp-tests.sh
+# Upstream commit:     c6dd999c24442be4550b085a4e29f91e92137058
+#                      (last commit touching this file, 2017-10-24)
+# Source branch:       master
+# Retrieved:           2026-09-01
+# SHA256 (vendored, = upstream): 4b566bb596b085d8cb1edfe7df05681f1127259f661aa84f4e9f86bde34bf639
+#
+# Note: the script downloads the WordPress core/test-suite archives over
+# the network at runtime (from wordpress.org / develop.svn.wordpress.org)
+# — the vendoring pins the installer code itself, not those archives.
+# WordPress core no longer ships install-wp-tests.sh; this WP-CLI copy is
+# the maintained classic installer.
 
 if [ $# -lt 3 ]; then
 	echo "usage: $0 <db-name> <db-user> <db-pass> [db-host] [wp-version] [skip-database-creation]"

@@ -102,8 +102,9 @@ jobs:
       - name: Install subversion
         run: sudo apt-get update && sudo apt-get install -y subversion
 
-      # Vendored from wp-cli/sample-plugin (SHA below); WordPress core no
-      # longer ships install-wp-tests.sh. Pinned for reproducibility.
+      # Vendored from wp-cli/sample-plugin — full provenance (upstream
+      # commit, retrieval date, SHA256) is recorded in the file header of
+      # bin/install-wp-tests.sh. WordPress core no longer ships it.
       - name: Install WordPress test suite
         run: bash bin/install-wp-tests.sh stateflow root root 127.0.0.1 ${{ matrix.wp }}
 
