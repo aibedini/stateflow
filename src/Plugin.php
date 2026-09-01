@@ -36,6 +36,15 @@ final class Plugin {
 	private bool $booted = false;
 
 	/**
+	 * Whether activate() has run since the last deactivate(). Observable
+	 * plugin-lifecycle state: real activation hooks set it, real
+	 * deactivation hooks clear it.
+	 *
+	 * @var bool
+	 */
+	private bool $activated = false;
+
+	/**
 	 * Requirements notice renderer (admin only).
 	 *
 	 * @var RequirementsNotice
@@ -109,12 +118,13 @@ final class Plugin {
 	}
 
 	/**
-	 * Activation callback. Must stay repeatable: with no schema or options
-	 * yet it is naturally idempotent.
+	 * Activation callback. Must stay repeatable: running it again after a
+	 * deactivation is a normal plugin lifecycle event.
 	 *
 	 * @return void
 	 */
 	public function activate(): void {
+		$this->activated = true;
 	}
 
 	/**
@@ -123,6 +133,17 @@ final class Plugin {
 	 * @return void
 	 */
 	public function deactivate(): void {
+		$this->activated = false;
+	}
+
+	/**
+	 * Whether the plugin is currently activated (activate() ran after the
+	 * last deactivate()). Observable outcome for lifecycle tests.
+	 *
+	 * @return bool
+	 */
+	public function is_activated(): bool {
+		return $this->activated;
 	}
 
 	/**

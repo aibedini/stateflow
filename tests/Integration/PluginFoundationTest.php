@@ -5,11 +5,12 @@
  * Runs only when WP_TESTS_DIR points at a WordPress core test suite with the
  * StateFlow plugin loaded via muplugins_loaded (see tests/Integration/bootstrap.php).
  *
- * SF-001.1: verifies real outcomes, not global hook existence:
- * - HPOS: WooCommerce's own FeaturesController must list StateFlow as
- *   compatible with custom_order_tables (item 5).
- * - Frontend: only StateFlow-registered callbacks count (item 6) — other
- *   code (WooCommerce itself) legitimately hooks wp_head & co.
+ * SF-001.1/SF-001.2: verifies real outcomes, not global hook existence:
+ * - HPOS: WooCommerce's own FeaturesController (resolved through the
+ *   container) must list StateFlow in the `compatible` set for
+ *   custom_order_tables (SF-001.2 item 5).
+ * - Frontend: only StateFlow-registered callbacks count (SF-001.1 item 6) —
+ *   other code (WooCommerce itself) legitimately hooks wp_head & co.
  *
  * @package StateFlow\Tests\Integration
  */
@@ -86,45 +87,76 @@ final class PluginFoundationTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * SF-001.1 item 5: WooCommerce itself must recognize StateFlow as
-	 * compatible with custom_order_tables (HPOS) — the real outcome, not
-	 * merely "a callback exists".
+	 * SF-001.2 item 5: WooCommerce itself must list StateFlow inside the
+	 * `compatible` set for custom_order_tables (HPOS) — the real outcome,
+	 * not merely "a callback exists".
+	 *
+	 * The controller is resolved through the supported runtime path (the
+	 * WooCommerce container, exactly as FeaturesUtil does) — never
+	 * FeaturesController::get_instance(), which does not exist.
 	 *
 	 * @return void
 	 */
 	public function test_hpos_compatibility_outcome(): void {
-		if ( ! class_exists( 'WooCommerce' ) ) {
+		if ( ! class_exists( 'WooCommerce' ) || ! class_exists( \Automattic\WooCommerce\Internal\Features\FeaturesController::class ) ) {
 			$this->markTestSkipped( 'WooCommerce is not installed in this WordPress test environment.' );
 		}
 
+		// The declaration hook fires while WooCommerce is still loading;
+		// fire it now and verify the resulting declaration is registered.
 		do_action( 'before_woocommerce_init' );
 
-		$controller = \Automattic\WooCommerce\Internal\Features\FeaturesController::get_instance();
+		// get_compatible_plugins_for_feature() requires woocommerce_init to
+		// have run (WC core fires it at the end of its own bootstrap).
+		if ( ! did_action( 'woocommerce_init' ) ) {
+			do_action( 'woocommerce_init' );
+		}
 
-		$this->assertNotNull( $controller, 'WooCommerce FeaturesController must be available.' );
+		$controller = wc_get_container()->get( \Automattic\WooCommerce\Internal\Features\FeaturesController::class );
 
-		$compatible = $controller->get_compatible_plugins_for_feature( 'custom_order_tables', true );
+		$result = $controller->get_compatible_plugins_for_feature( 'custom_order_tables', true );
 
-		$this->assertIsArray( $compatible );
+		$this->assertIsArray( $result );
+		$this->assertArrayHasKey(
+			'compatible',
+			$result,
+			'get_compatible_plugins_for_feature() must return categorized compatibility info.'
+		);
+		$this->assertIsArray( $result['compatible'] );
 		$this->assertContains(
 			'stateflow/stateflow.php',
-			$compatible,
+			$result['compatible'],
 			'WooCommerce must recognize StateFlow as HPOS-compatible.'
 		);
 	}
 
 	/**
-	 * Activation and deactivation are repeatable on a live WordPress.
+	 * SF-001.2 item 4: activation/deactivation are repeatable on a live
+	 * WordPress, with real observable outcomes — not assertTrue(true).
 	 *
 	 * @return void
 	 */
 	public function test_activation_and_deactivation_are_repeatable(): void {
-		\StateFlow\Plugin::instance()->activate();
-		\StateFlow\Plugin::instance()->deactivate();
-		\StateFlow\Plugin::instance()->activate();
-		\StateFlow\Plugin::initialize();
+		$plugin = \StateFlow\Plugin::instance();
 
-		$this->assertTrue( true );
+		$plugin->activate();
+		$this->assertTrue( $plugin->is_activated(), 'After activate() the plugin must be activated.' );
+
+		$plugin->deactivate();
+		$this->assertFalse( $plugin->is_activated(), 'After deactivate() the plugin must be deactivated.' );
+
+		// Repeat: the second activation must succeed identically.
+		$plugin->activate();
+		$this->assertTrue( $plugin->is_activated(), 'Repeated activation must succeed.' );
+
+		// initialize() is an instance method; call it on the instance.
+		$plugin->initialize();
+
+		// The supported stack registers no admin_notices listener.
+		$this->assertFalse(
+			$this->stateflow_has_hook( 'admin_notices' ),
+			'initialize() on a supported stack must not register an admin notice.'
+		);
 	}
 
 	/**
