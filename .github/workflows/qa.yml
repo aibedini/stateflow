@@ -170,6 +170,11 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
+      # bin/install-wp-tests.sh fetches the WordPress test suite over SVN;
+      # runners no longer ship subversion.
+      - name: Install subversion
+        run: sudo apt-get update && sudo apt-get install -y subversion
+
       - name: Install WordPress test suite
         run: bash bin/install-wp-tests.sh stateflow root root 127.0.0.1 latest
 
