@@ -175,8 +175,11 @@ jobs:
       - name: Install subversion
         run: sudo apt-get update && sudo apt-get install -y subversion
 
+      # The MariaDB service container already created the database
+      # (MARIADB_DATABASE below), so the installer must skip its own
+      # CREATE DATABASE step (6th argument = skip-database-creation).
       - name: Install WordPress test suite
-        run: bash bin/install-wp-tests.sh stateflow root root 127.0.0.1 latest
+        run: bash bin/install-wp-tests.sh stateflow root root 127.0.0.1 latest true
 
       - name: Download WooCommerce 11.0.1 release
         run: |
