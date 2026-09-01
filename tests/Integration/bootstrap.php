@@ -49,6 +49,11 @@ require_once $_tests_dir . '/includes/functions.php';
 /**
  * Load WooCommerce (optional) and StateFlow as if both were active plugins.
  *
+ * When STATEFLOW_BOOTSTRAP_FILE points at the StateFlow copy installed in
+ * the test WordPress's plugins directory, that copy is loaded instead of
+ * the workspace copy: WooCommerce resolves declaration plugin IDs via
+ * plugin_basename(), which only matches paths inside wp-content/plugins.
+ *
  * @return void
  */
 function _stateflow_manually_load_plugin(): void {
@@ -58,9 +63,32 @@ function _stateflow_manually_load_plugin(): void {
 		require $wc_bootstrap;
 	}
 
-	require dirname( __DIR__, 2 ) . '/stateflow.php';
+	$stateflow_bootstrap = getenv( 'STATEFLOW_BOOTSTRAP_FILE' );
+
+	if ( is_string( $stateflow_bootstrap ) && '' !== $stateflow_bootstrap && file_exists( $stateflow_bootstrap ) ) {
+		require $stateflow_bootstrap;
+	} else {
+		require dirname( __DIR__, 2 ) . '/stateflow.php';
+	}
 }
 
 tests_add_filter( 'muplugins_loaded', '_stateflow_manually_load_plugin' );
 
 require $_tests_dir . '/includes/bootstrap.php';
+
+// Simulate plugin activation for WooCommerce's plugin-awareness queries.
+// is_plugin_active() (used by WooCommerce's PluginUtil to build the
+// active-plugin lists) reads the active_plugins option, and get_plugins()
+// scans the plugins directory. The CI setup installs both plugins into the
+// test WordPress's plugins directory (see .github/workflows/qa.yml) but the
+// test suite never activates them; without this, active_only compatibility
+// queries return an empty set.
+$stateflow_active = array( 'stateflow/stateflow.php' );
+
+$stateflow_wc_bootstrap = getenv( 'STATEFLOW_WC_PLUGIN_FILE' );
+
+if ( is_string( $stateflow_wc_bootstrap ) && '' !== $stateflow_wc_bootstrap ) {
+	$stateflow_active[] = 'woocommerce/woocommerce.php';
+}
+
+update_option( 'active_plugins', $stateflow_active );

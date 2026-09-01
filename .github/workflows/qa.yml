@@ -110,11 +110,21 @@ jobs:
       # Released plugin zip (item 3): exact package merchants install —
       # NOT the woocommerce/woocommerce monorepo checkout, whose src/
       # layout (and root woocommerce.php) is not the installable layout.
+      # WooCommerce resolves HPOS declarations via plugin_basename(),
+      # which only matches plugins inside wp-content/plugins — so the
+      # released package is installed there, and StateFlow is copied in
+      # beside it (same layout merchants get after installing both).
       - name: Download WooCommerce ${{ matrix.wc }} release
         run: |
           curl -fsSL "https://downloads.wordpress.org/plugin/woocommerce.${{ matrix.wc }}.zip" -o /tmp/wc.zip
           unzip -q /tmp/wc.zip -d /tmp/wc-plugin
-          echo "STATEFLOW_WC_PLUGIN_FILE=/tmp/wc-plugin/woocommerce/woocommerce.php" >> "$GITHUB_ENV"
+          WP_SRC_DIR="/tmp/wordpress"
+          mkdir -p "$WP_SRC_DIR/wp-content/plugins"
+          unzip -q /tmp/wc.zip -d "$WP_SRC_DIR/wp-content/plugins/"
+          cp -r "$GITHUB_WORKSPACE" "$WP_SRC_DIR/wp-content/plugins/stateflow"
+          rm -rf "$WP_SRC_DIR/wp-content/plugins/stateflow/.git"
+          echo "STATEFLOW_WC_PLUGIN_FILE=$WP_SRC_DIR/wp-content/plugins/woocommerce/woocommerce.php" >> "$GITHUB_ENV"
+          echo "STATEFLOW_BOOTSTRAP_FILE=$WP_SRC_DIR/wp-content/plugins/stateflow/stateflow.php" >> "$GITHUB_ENV"
 
       # bin/qa.php test:integration enforces the strict mode (missing
       # WP test env => exit 1) via STATEFLOW_STRICT_INTEGRATION=1.
