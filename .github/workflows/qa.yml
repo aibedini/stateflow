@@ -1,0 +1,124 @@
+name: QA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: Static analysis + unit suites (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Syntax lint
+        run: composer lint
+
+      - name: PHPCS (WordPress Coding Standards)
+        run: composer cs
+
+      - name: PHPStan (level max)
+        run: composer stan
+
+      - name: Unit suite (WooCommerce absent)
+        run: composer test:unit
+
+      - name: Unit suite (WooCommerce present)
+        run: composer test:present
+
+  integration:
+    name: Integration (WP ${{ matrix.wp }} / WC ${{ matrix.wc }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Compatibility matrix (SF-001.1 item 7): minimum generation,
+          # a mid generation, and the current verified generation.
+          - { wp: '6.4', wc: '8.0' }   # minimums: WC 8.0.x, WP 6.4.x
+          - { wp: '6.5', wc: '9.2' }   # mid generation
+          - { wp: 'latest', wc: '11.0' } # current verified (smoke-tested 11.0.1)
+    env:
+      STATEFLOW_STRICT_INTEGRATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: wp-cli
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Install WordPress test suite
+        run: bash vendor/bin/install-wp-tests.sh stateflow root root 127.0.0.1 ${{ matrix.wp }}
+
+      - name: Start MySQL
+        run: sudo systemctl start mysql.service
+
+      - name: Checkout WooCommerce ${{ matrix.wc }}
+        uses: actions/checkout@v4
+        with:
+          repository: woocommerce/woocommerce
+          ref: ${{ matrix.wc }}
+          path: wc
+
+      - name: Run integration suite (mandatory)
+        run: |
+          export STATEFLOW_WC_PLUGIN_FILE="$GITHUB_WORKSPACE/wc/woocommerce.php"
+          composer test:integration
+
+  smoke:
+    name: Plugin smoke (WP latest + WC latest, SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: wp-cli
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Assemble plugin directory
+        run: mkdir -p /tmp/stateflow-plugin && cp stateflow.php composer.json /tmp/stateflow-plugin/ && cp -r src vendor /tmp/stateflow-plugin/
+
+      - name: Install WordPress with SQLite and activate WooCommerce + StateFlow
+        run: |
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          wp core download --allow-root
+          wp config create --dbname=smoke --dbuser=unused --dbpass=unused --dbhost=127.0.0.1 --path=/tmp/smoke --allow-root
+          wp config set DB_ENGINE sqlite --path=/tmp/smoke --allow-root
+          wp config set DB_NAME "/tmp/smoke/wp-content/database/.ht.sqlite" --path=/tmp/smoke --allow-root
+          wp package install wp-cli/db-command --allow-root >/dev/null 2>&1 || true
+          curl -sL https://downloads.wordpress.org/plugin/sqlite-database-integration.latest-stable.zip -o sqlite.zip
+          curl -sL https://downloads.wordpress.org/plugin/woocommerce.latest-stable.zip -o wc.zip
+          unzip -q sqlite.zip -d wp-content/plugins/ && unzip -q wc.zip -d wp-content/plugins/
+          rm sqlite.zip wc.zip
+          cp wp-content/plugins/sqlite-database-integration/db.copy wp-content/db.php
+          mkdir -p wp-content/database wp-content/uploads wp-content/upgrade
+          cp -r /tmp/stateflow-plugin wp-content/plugins/stateflow
+          wp core install --url=smoke.local --title="Smoke" --admin_user=admin --admin_password=admin --admin_email=admin@example.com --skip-email --allow-root
+          wp plugin activate woocommerce stateflow --allow-root
+          wp plugin activate woocommerce stateflow --allow-root  # repeat: must stay Success
+          wp plugin list --status=active --field=name --allow-root | grep -qx stateflow
+          wp eval 'var_dump(class_exists("StateFlow\Plugin"));' --allow-root | grep -q "bool(true)"
+          wp eval '$c = wc_get_container()->get(Automattic\WooCommerce\Internal\Features\FeaturesController::class); $l = $c->get_compatible_plugins_for_feature("custom_order_tables", true); exit(in_array("stateflow/stateflow.php", $l["compatible"] ?? [], true) ? 0 : 1);' --allow-root

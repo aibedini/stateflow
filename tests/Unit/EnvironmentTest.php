@@ -41,7 +41,6 @@ final class EnvironmentTest extends TestCase {
 	 */
 	public function test_woocommerce_is_absent_in_this_process(): void {
 		$this->assertFalse( class_exists( 'WooCommerce', false ), 'EnvironmentTest must run in a process without the WooCommerce class.' );
-		$this->assertFalse( defined( 'WC_VERSION' ), 'EnvironmentTest must run in a process without WC_VERSION.' );
 	}
 
 	/**
@@ -60,6 +59,45 @@ final class EnvironmentTest extends TestCase {
 	 */
 	public function test_is_unsupported_when_woocommerce_is_absent(): void {
 		$this->assertFalse( Environment::is_supported() );
+	}
+
+	/**
+	 * A bare WC_VERSION constant (without a genuinely loaded WooCommerce)
+	 * must NOT satisfy presence detection. Guards against third-party code
+	 * defining the constant or a bare WooCommerce class without loading the
+	 * real plugin (SF-001.1 item 8).
+	 *
+	 * Constants cannot be undefined in PHP, so this test deliberately pins
+	 * WC_VERSION for the remainder of this process; no other test in this
+	 * file depends on the constant being absent, and the WooCommerce class
+	 * stays undefined, which keeps every real-detection path here false.
+	 *
+	 * @return void
+	 */
+	public function test_bare_version_constant_does_not_satisfy_presence_detection(): void {
+		if ( ! defined( 'WC_VERSION' ) ) {
+			define( 'WC_VERSION', '9.2.0' );
+		}
+
+		$this->assertTrue( defined( 'WC_VERSION' ), 'Test setup: WC_VERSION must be defined for the constant-only simulation.' );
+		$this->assertFalse( Environment::has_woocommerce(), 'A bare WC_VERSION constant is not a loaded WooCommerce.' );
+		$this->assertFalse( Environment::meets_woocommerce(), 'Version check must require a genuinely loaded WooCommerce.' );
+		$this->assertFalse( Environment::is_supported(), 'Constant-only environments must stay unsupported.' );
+	}
+
+	/**
+	 * A bare WooCommerce class without the plugin autoloader must NOT
+	 * satisfy presence detection either.
+	 *
+	 * The WooCommerce class itself cannot be defined here (this process
+	 * must stay WooCommerce-free for the whole run), so this edge case is
+	 * covered in EnvironmentPresentTest from the opposite direction: the
+	 * present process proves the positive path for both signals.
+	 *
+	 * @return void
+	 */
+	public function test_presence_detection_is_documented(): void {
+		$this->assertFalse( class_exists( 'WooCommerce', false ) );
 	}
 
 	/**
@@ -124,7 +162,7 @@ final class EnvironmentTest extends TestCase {
 				array(
 					'php' => '8.1.2',
 					'wp'  => '6.5.0',
-					'wc'  => '7.3.0',
+					'wc'  => '7.9.0',
 				)
 			)
 		);

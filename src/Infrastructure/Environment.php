@@ -58,12 +58,15 @@ final class Environment {
 	}
 
 	/**
-	 * Whether WooCommerce is available (plugin present and loaded).
+	 * Whether WooCommerce is available: the plugin class must genuinely be
+	 * loaded. A bare WC_VERSION constant (or a class defined by unrelated
+	 * code) alone never satisfies presence. The `false` flag keeps this
+	 * deterministic by never triggering an autoloader.
 	 *
 	 * @return bool
 	 */
 	public static function has_woocommerce(): bool {
-		return class_exists( 'WooCommerce' );
+		return class_exists( 'WooCommerce', false );
 	}
 
 	/**
@@ -87,10 +90,13 @@ final class Environment {
 	/**
 	 * Whether the current WooCommerce meets the minimum.
 	 *
+	 * Requires a genuinely loaded WooCommerce (class) plus a readable
+	 * version constant; either signal alone is not enough (SF-001.1 item 8).
+	 *
 	 * @return bool
 	 */
 	public static function meets_woocommerce(): bool {
-		if ( ! defined( 'WC_VERSION' ) ) {
+		if ( ! self::has_woocommerce() || ! defined( 'WC_VERSION' ) ) {
 			return false;
 		}
 

@@ -42,9 +42,10 @@ final class EnvironmentPresentTest extends TestCase {
 	 * @return void
 	 */
 	public function test_woocommerce_is_present_in_this_process(): void {
-		// Value check proves bootstrap-present.php actually ran; PHPStan
-		// would flag class_exists()/defined() assertions as always-true.
-		$this->assertSame( '9.2.0', WC_VERSION );
+		// Value check proves bootstrap-present.php actually ran; the version
+		// is matrix-controlled (WC_TEST_VERSION, default 9.2.0).
+		$this->assertMatchesRegularExpression( '/^\d+\.\d+\.\d+$/', WC_VERSION );
+		$this->assertTrue( class_exists( 'WooCommerce', false ) );
 	}
 
 	/**

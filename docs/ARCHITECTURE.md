@@ -1,6 +1,6 @@
 # StateFlow Architecture (SF-001)
 
-Engineering foundation for a WooCommerce order-state automation plugin.
+Engineering foundation for StateFlow — StateFlow adds an explainable sales-state layer to WooCommerce products and variations without mutating their canonical price or inventory data.
 This ticket deliberately implements **no product behavior** — no states,
 no UI, no automation, no custom tables. It establishes the boundaries,
 guard rails and quality gates every later ticket builds on.
@@ -72,8 +72,11 @@ storage directly in any ticket.
 
 ## Performance & security stance (this ticket)
 
-- Zero hooks registered on frontend requests; zero DB queries; zero
-  enqueued assets; no React/admin app.
+- No frontend-specific query, template, rendering, or asset hooks are
+  registered by SF-001. (Lifecycle hooks — `plugins_loaded`,
+  `before_woocommerce_init`, activation/deactivation — are global by
+  nature; the footprint is verified by the integration suite.)
+- Zero DB queries; zero enqueued assets; no React/admin app.
 - No external HTTP, no telemetry, no remote code, no write endpoints.
 - `composer qa` = lint + phpcs + phpstan + full unit matrix.
 

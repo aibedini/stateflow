@@ -1,7 +1,8 @@
 # StateFlow
 
-Order state automation for WooCommerce. **SF-001 (engineering foundation) only** —
-no product features yet.
+StateFlow adds an explainable sales-state layer to WooCommerce products and variations without mutating their canonical price or inventory data.
+
+**SF-001 (engineering foundation) only** — no product features yet.
 
 ## Requirements
 

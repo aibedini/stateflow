@@ -2,6 +2,9 @@
 /**
  * Test harness helpers: manipulate the WordPress stub globals.
  *
+ * Reset() restores the pristine post-boot snapshot (see PluginLoader) plus
+ * the stub globals, so every test is order-independent (SF-001.1 item 3).
+ *
  * @package StateFlow\Tests
  */
 
@@ -15,15 +18,19 @@ namespace StateFlow\Tests;
 final class Harness {
 
 	/**
-	 * Reset every stub global to its default state.
+	 * Restore the deterministic baseline: the plugin's own post-boot hook
+	 * registry (or an empty registry if the plugin is not loaded), plus
+	 * fresh stub globals. Reset never accumulates state from previous tests.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
-		$GLOBALS['is_admin']     = true;
-		$GLOBALS['sf_user_can']  = true;
-		$GLOBALS['wp_version']   = '6.5.0';
-		$GLOBALS['table_prefix'] = 'wptests_';
+		$snapshot = is_array( $GLOBALS['sf_hooks_snapshot'] ?? null ) ? $GLOBALS['sf_hooks_snapshot'] : array();
+
+		$GLOBALS['sf_hooks']    = $snapshot;
+		$GLOBALS['is_admin']    = true;
+		$GLOBALS['sf_user_can'] = true;
+		$GLOBALS['wp_version']  = '6.5.0';
 
 		if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
 			\Automattic\WooCommerce\Utilities\FeaturesUtil::$calls = array();

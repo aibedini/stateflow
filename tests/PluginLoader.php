@@ -1,6 +1,11 @@
 <?php
 /**
- * Loads the real plugin main file exactly once per process.
+ * Loads the real plugin main file exactly once per process and snapshots the
+ * pristine post-boot state (SF-001.1 item 3).
+ *
+ * The snapshot gives Harness::reset() a deterministic baseline: every test —
+ * in any execution order — starts from the exact hook/globals state the
+ * plugin had right after boot(), no matter what previous tests fired.
  *
  * @package StateFlow\Tests
  */
@@ -22,7 +27,8 @@ final class PluginLoader {
 	private static bool $loaded = false;
 
 	/**
-	 * Load the plugin main file (no-op on subsequent calls).
+	 * Load the plugin main file (no-op on subsequent calls) and snapshot the
+	 * pristine post-boot state for Harness::reset().
 	 *
 	 * @return void
 	 */
@@ -34,5 +40,18 @@ final class PluginLoader {
 		require_once dirname( __DIR__ ) . '/stateflow.php';
 
 		self::$loaded = true;
+
+		// Pristine baseline: hooks registered by the bootstrap itself, before
+		// any test fired anything. Test-side state, never a production API.
+		$GLOBALS['sf_hooks_snapshot'] = is_array( $GLOBALS['sf_hooks'] ?? null ) ? $GLOBALS['sf_hooks'] : array();
+	}
+
+	/**
+	 * Whether the plugin file was already loaded in this process.
+	 *
+	 * @return bool
+	 */
+	public static function is_loaded(): bool {
+		return self::$loaded;
 	}
 }

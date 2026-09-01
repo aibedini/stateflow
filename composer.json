@@ -1,6 +1,6 @@
 {
     "name": "stateflow/stateflow",
-    "description": "Order state automation for WooCommerce - engineering foundation (SF-001).",
+    "description": "StateFlow adds an explainable sales-state layer to WooCommerce products and variations without mutating their canonical price or inventory data.",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "authors": [
@@ -43,20 +43,21 @@
         "lint": "@php bin/lint.php",
         "test": [
             "@test:unit",
-            "@test:present"
+            "@test:present",
+            "@test:matrix"
         ],
-        "test:unit": "@php vendor/bin/phpunit --testsuite unit",
-        "test:present": "@php vendor/bin/phpunit -c phpunit-present.xml.dist",
-        "test:integration": "@php vendor/bin/phpunit -c phpunit-integration.xml.dist",
-        "stan": "@php vendor/bin/phpstan analyse --memory-limit=1G",
-        "cs": "@php vendor/bin/phpcs",
-        "cs:fix": "@php vendor/bin/phpcbf",
+        "test:unit": "@php bin/qa.php test:unit",
+        "test:present": "@php bin/qa.php test:present",
+        "test:matrix": "@php bin/qa.php test:matrix",
+        "test:integration": "@php bin/qa.php test:integration",
+        "stan": "@php bin/qa.php stan",
+        "cs": "@php bin/qa.php cs",
+        "cs:fix": "@php bin/qa.php cs:fix",
         "qa": [
             "@lint",
             "@cs",
             "@stan",
-            "@test:unit",
-            "@test:present"
+            "@test"
         ]
     }
 }
