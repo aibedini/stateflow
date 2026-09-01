@@ -43,3 +43,22 @@ Individual gates:
   unknown versions.
 - Full architecture: `docs/ARCHITECTURE.md`; real-stack verification:
   `docs/SMOKE-TEST.md`.
+
+## Persistence contract (binding for all future tickets — SF-002 §34)
+
+- **Never** store virtual Normal/Inherited states as assignment rows.
+  Absence of a row IS the normal/inherited semantics; `StateKey` rejects
+  both as reserved keys.
+- **Never** write StateFlow state into WooCommerce stock, price, post
+  status or catalog visibility. Canonical WooCommerce data stays canonical.
+- **Never** bypass `MigrationRunner` for schema changes. All DDL goes
+  through `ensure_current()` (lock → dbDelta → verify → write version).
+- **Every** schema change increments `Schema::VERSION` and ships a
+  migration + integration tests on the full database matrix.
+- **Never** edit an old migration's meaning after release. Schema
+  versions migrate strictly forward.
+- **No** destructive schema operation (DROP, data-erasing ALTER) without
+  an explicit migration and a dedicated test.
+- **No** table/index checks (`SHOW TABLES`, `DESCRIBE`, `SHOW INDEX`,
+  dbDelta) on hot frontend paths — the schema-current fast path is a
+  cached option read plus an integer comparison, nothing else.

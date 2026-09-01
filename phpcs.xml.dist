@@ -63,6 +63,18 @@
 		<exclude-pattern>*/bin/*</exclude-pattern>
 	</rule>
 
+	<!-- Schema inspection/migration code touches StateFlow-owned tables
+		 directly by design (DESCRIBE/SHOW INDEX/dbDelta in the verifier,
+		 migration fixtures in tests). These are structural operations on
+		 trusted TableNames-resolved identifiers, not app-data queries; the
+		 direct-query sniff targets unprepared app-data access on shared
+		 tables. Repository-style data access arrives in later tickets and
+		 will go through the normal caching-aware paths. -->
+	<rule ref="WordPress.DB.DirectDatabaseQuery">
+		<exclude-pattern>*/src/Infrastructure/Database/SchemaVerifier\.php</exclude-pattern>
+		<exclude-pattern>*/tests/Integration/PersistenceTest\.php</exclude-pattern>
+	</rule>
+
 	<arg name="extensions" value="php"/>
 	<arg value="sp"/>
 	<arg name="colors"/>

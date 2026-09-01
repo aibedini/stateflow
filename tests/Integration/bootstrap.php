@@ -20,6 +20,12 @@
 
 $_tests_dir = getenv( 'WP_TESTS_DIR' );
 
+// Query accounting for the SF-002 fast-path benchmark: must be defined
+// before WordPress instantiates wpdb (tests_bootstrap loads WP below).
+if ( ! defined( 'SAVEQUERIES' ) ) {
+	define( 'SAVEQUERIES', true );
+}
+
 if ( ! $_tests_dir ) {
 	$_tests_dir = rtrim( sys_get_temp_dir(), '/\\' ) . '/wordpress-tests-lib';
 }

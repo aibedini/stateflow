@@ -9,6 +9,7 @@
 	<testsuites>
 		<testsuite name="integration">
 			<file>tests/Integration/PluginFoundationTest.php</file>
+			<file>tests/Integration/PersistenceTest.php</file>
 		</testsuite>
 	</testsuites>
 </phpunit>

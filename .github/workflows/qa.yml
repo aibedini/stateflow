@@ -137,6 +137,58 @@ jobs:
         run: composer test:integration
 
   # ------------------------------------------------------------------
+  # Real MariaDB 10.11 validation (SF-002 §25): the same SF-002 schema/
+  # migration integration set against MariaDB — the engine family most
+  # common on real WordPress hosts — on the current stack.
+  # ------------------------------------------------------------------
+  mariadb:
+    name: Integration (MariaDB 10.11 / PHP 8.3 / WP latest / WC 11.0.1)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: stateflow
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --password=root || mysqladmin ping --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      STATEFLOW_STRICT_INTEGRATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Install WordPress test suite
+        run: bash bin/install-wp-tests.sh stateflow root root 127.0.0.1 latest
+
+      - name: Download WooCommerce 11.0.1 release
+        run: |
+          curl -fsSL "https://downloads.wordpress.org/plugin/woocommerce.11.0.1.zip" -o /tmp/wc.zip
+          unzip -q /tmp/wc.zip -d /tmp/wc-plugin
+          WP_SRC_DIR="/tmp/wordpress"
+          mkdir -p "$WP_SRC_DIR/wp-content/plugins"
+          unzip -q /tmp/wc.zip -d "$WP_SRC_DIR/wp-content/plugins/"
+          cp -r "$GITHUB_WORKSPACE" "$WP_SRC_DIR/wp-content/plugins/stateflow"
+          rm -rf "$WP_SRC_DIR/wp-content/plugins/stateflow/.git" "$WP_SRC_DIR/wp-content/plugins/stateflow/vendor"
+          echo "STATEFLOW_WC_PLUGIN_FILE=$WP_SRC_DIR/wp-content/plugins/woocommerce/woocommerce.php" >> "$GITHUB_ENV"
+          echo "STATEFLOW_BOOTSTRAP_FILE=$WP_SRC_DIR/wp-content/plugins/stateflow/stateflow.php" >> "$GITHUB_ENV"
+
+      - name: Run SF-002 schema/migration integration suite (mandatory)
+        run: composer test:integration
+
+  # ------------------------------------------------------------------
   # End-to-end smoke: real WP + real WooCommerce + SQLite, activate the
   # plugin (twice), verify HPOS listing through the container.
   # ------------------------------------------------------------------
