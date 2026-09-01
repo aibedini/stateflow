@@ -97,6 +97,11 @@ jobs:
       - name: Start MySQL
         run: sudo systemctl start mysql.service
 
+      # bin/install-wp-tests.sh fetches the WordPress test suite over SVN
+      # (develop.svn.wordpress.org); runners no longer ship subversion.
+      - name: Install subversion
+        run: sudo apt-get update && sudo apt-get install -y subversion
+
       # Vendored from wp-cli/sample-plugin (SHA below); WordPress core no
       # longer ships install-wp-tests.sh. Pinned for reproducibility.
       - name: Install WordPress test suite
