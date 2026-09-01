@@ -11,6 +11,7 @@ parameters:
 		analyseAndScan:
 			- tools
 			- vendor
+			- .smoke
 			# Test fixtures: the FeaturesUtil stub clashes with the real
 			# woocommerce-stubs (both define the class; analysis of a fixture
 			# against the real stub produces false positives).

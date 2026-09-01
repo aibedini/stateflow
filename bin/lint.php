@@ -1,35 +1,37 @@
 <?php
 /**
- * Cross-platform recursive PHP syntax lint.
+ * Cross-platform PHP syntax lint over first-party code (src, tests, bin, stateflow.php).
  *
- * Excludes vendor/ and tools/ (third-party and local toolchain).
- * Exit code 1 when any file fails to parse.
+ * Vendor, tools and environment directories (.smoke, .git) are never scanned:
+ * the lint scope is the code this repository owns. Exit code 1 on any parse
+ * failure.
  *
  * @package StateFlow
  */
 
 $root = dirname( __DIR__ );
 
-$iterator = new RecursiveIteratorIterator(
-	new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS )
-);
+$targets = array( 'src', 'tests', 'bin' );
 
 $files = array();
 
-foreach ( $iterator as $file ) {
-	if ( ! $file instanceof SplFileInfo || ! $file->isFile() || 'php' !== $file->getExtension() ) {
-		continue;
+foreach ( $targets as $target ) {
+	$iterator = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $root . '/' . $target, FilesystemIterator::SKIP_DOTS )
+	);
+
+	foreach ( $iterator as $file ) {
+		if ( ! $file instanceof SplFileInfo || ! $file->isFile() || 'php' !== $file->getExtension() ) {
+			continue;
+		}
+
+		$files[] = str_replace( chr( 92 ), '/', $file->getPathname() );
 	}
-
-	$path = str_replace( '\\', '/', $file->getPathname() );
-
-	if ( false !== strpos( $path, '/vendor/' ) || false !== strpos( $path, '/tools/' ) ) {
-		continue;
-	}
-
-	$files[] = $path;
 }
 
+$files[] = str_replace( chr( 92 ), '/', $root ) . '/stateflow.php';
+
+$files = array_values( array_unique( $files ) );
 sort( $files );
 
 $failures = 0;
@@ -44,9 +46,9 @@ foreach ( $files as $path ) {
 
 	if ( 0 !== $exit ) {
 		++$failures;
-		echo implode( "\n", $output ), "\n";
+		echo implode( PHP_EOL, $output ), PHP_EOL;
 	}
 }
 
-printf( "Linted %d PHP files, %d failure(s).\n", count( $files ), $failures );
+printf( 'Linted %d PHP files, %d failure(s)%s', count( $files ), $failures, PHP_EOL );
 exit( $failures ? 1 : 0 );

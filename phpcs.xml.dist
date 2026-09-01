@@ -6,6 +6,7 @@
 	<exclude-pattern>*/vendor/*</exclude-pattern>
 	<exclude-pattern>*/tools/*</exclude-pattern>
 	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/\.smoke/*</exclude-pattern>
 
 	<rule ref="WordPress">
 		<!-- StateFlow code lives in the StateFlow\ PSR-4 namespace and cannot
