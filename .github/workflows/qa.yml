@@ -65,11 +65,17 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
-      - name: Install WordPress test suite
-        run: bash vendor/bin/install-wp-tests.sh stateflow root root 127.0.0.1 ${{ matrix.wp }}
+      # install-wp-tests.sh ships with WordPress core, not with composer
+      # packages — fetch the canonical installer from wordpress-develop.
+      - name: Fetch WordPress test-suite installer
+        run: curl -fsSL https://raw.githubusercontent.com/WordPress/wordpress-develop/trunk/tests/phpunit/includes/install-wp-tests.sh -o install-wp-tests.sh
 
+      # The installer needs a live MySQL connection to create the test DB.
       - name: Start MySQL
         run: sudo systemctl start mysql.service
+
+      - name: Install WordPress test suite
+        run: bash install-wp-tests.sh stateflow root root 127.0.0.1 ${{ matrix.wp }}
 
       - name: Checkout WooCommerce ${{ matrix.wc }}
         uses: actions/checkout@v4
@@ -105,7 +111,7 @@ jobs:
         run: |
           mkdir -p /tmp/smoke && cd /tmp/smoke
           wp core download --allow-root
-          wp config create --dbname=smoke --dbuser=unused --dbpass=unused --dbhost=127.0.0.1 --path=/tmp/smoke --allow-root
+          wp config create --dbname=smoke --dbuser=unused --dbpass=unused --dbhost=127.0.0.1 --path=/tmp/smoke --allow-root --skip-check
           wp config set DB_ENGINE sqlite --path=/tmp/smoke --allow-root
           wp config set DB_NAME "/tmp/smoke/wp-content/database/.ht.sqlite" --path=/tmp/smoke --allow-root
           wp package install wp-cli/db-command --allow-root >/dev/null 2>&1 || true

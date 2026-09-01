@@ -9,9 +9,11 @@ parameters:
 		- tests
 	excludePaths:
 		analyseAndScan:
-			- tools
+			# Git-ignored local toolchain/stack: present on dev machines,
+			# absent on CI runners — hence the optional (?) markers.
+			- tools (?)
+			- .smoke (?)
 			- vendor
-			- .smoke
 			# Test fixtures: the FeaturesUtil stub clashes with the real
 			# woocommerce-stubs (both define the class; analysis of a fixture
 			# against the real stub produces false positives).
