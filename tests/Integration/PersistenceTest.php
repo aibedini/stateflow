@@ -310,9 +310,11 @@ final class PersistenceTest extends WP_UnitTestCase {
 		delete_option( StateFlow\Infrastructure\Database\Schema::VERSION_OPTION );
 		$this->drop_stateflow_tables();
 
-		$this->runner()->simulate_verification_failure();
+		// ONE runner instance carries the failure seam into ensure_current().
+		$failing = $this->runner();
+		$failing->simulate_verification_failure();
 
-		$result = $this->runner()->ensure_current();
+		$result = $failing->ensure_current();
 
 		$this->assertFalse( $result->is_success(), 'A failed verification must report failure.' );
 		$this->assertNotEmpty( $result->errors() );
@@ -321,7 +323,7 @@ final class PersistenceTest extends WP_UnitTestCase {
 			'The schema version must NOT be written when verification fails.'
 		);
 
-		// Recovery: a real run afterwards migrates and verifies.
+		// Recovery: a real runner (fresh seam state) migrates and verifies.
 		$recovery = $this->runner()->ensure_current();
 
 		$this->assertTrue( $recovery->is_success(), 'Recovery migration must succeed.' );
