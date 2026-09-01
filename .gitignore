@@ -12,3 +12,4 @@
 .phpunit.result.cache-present
 .phpunit.result.cache*
 phpcs-*.txt
+.smoke/
