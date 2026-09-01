@@ -24,7 +24,30 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/vendor/autoload.php';
+// Composer autoloader when the dev dependencies are present; otherwise a
+// minimal PSR-4 fallback for the StateFlow\ namespace. The released plugin
+// has no runtime vendor dependencies; the fallback keeps the same file
+// working (and testable) without a composer install.
+if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
+	require_once __DIR__ . '/vendor/autoload.php';
+} elseif ( ! defined( 'STATEFLOW_AUTOLOADER_REGISTERED' ) ) {
+	define( 'STATEFLOW_AUTOLOADER_REGISTERED', true );
+
+	spl_autoload_register(
+		static function ( string $class_name ): void {
+			if ( ! str_starts_with( $class_name, 'StateFlow\\' ) ) {
+				return;
+			}
+
+			$relative  = str_replace( '\\', '/', substr( $class_name, strlen( 'StateFlow\\' ) ) );
+			$candidate = __DIR__ . '/src/' . $relative . '.php';
+
+			if ( is_file( $candidate ) ) {
+				require_once $candidate;
+			}
+		}
+	);
+}
 
 if ( ! defined( 'STATEFLOW_VERSION' ) ) {
 	// Cheap runtime constant. The consistency with the plugin header Version
