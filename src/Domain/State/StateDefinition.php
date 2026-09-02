@@ -42,35 +42,49 @@ final class StateDefinition {
 	private static ?bool $has_mbstring = null;
 
 	/**
-	 * Unicode-aware length in code points, with deterministic UTF-8
-	 * validation in BOTH environments (SF-002.1 §2):
+	 * Test seam: forces the mbstring-availability decision. Null = auto-
+	 * detect (production). Tests set true/false to exercise both counting
+	 * paths deterministically. Production code never writes this.
 	 *
-	 * - mbstring: mb_strlen(…, 'UTF-8') counts code points; mb_strlen also
-	 *   substitutes U+FFFD for malformed sequences and reports them as one
-	 *   code point each, so invalid UTF-8 never shortens the count.
-	 * - no mbstring: preg_match('//u') first validates UTF-8 strictly and
-	 *   REJECTS invalid input deterministically (no silent munging); valid
-	 *   UTF-8 is then counted by its lead bytes, which equals the
-	 *   code-point count exactly.
+	 * @var bool|null
+	 */
+	public static ?bool $mbstring_override = null;
+
+	/**
+	 * Unicode-aware length in code points, with ONE deterministic UTF-8
+	 * validation step shared by BOTH environments (SF-002.2):
+	 *
+	 * - validation: preg_match('//u') is a strict UTF-8 well-formedness
+	 *   check on every stock PHP build; invalid input throws
+	 *   DomainException — identically whether or not mbstring is loaded.
+	 *   No silent substitution, no silent truncation.
+	 * - counting: mb_strlen(…, 'UTF-8') when mbstring is available, else
+	 *   an exact lead-byte count (on valid UTF-8 this equals the
+	 *   code-point count).
 	 *
 	 * @param string $text UTF-8 text.
 	 * @return int Number of Unicode code points.
-	 * @throws DomainException When the text is not valid UTF-8 (mbstring
-	 *                         fallback path). Never silently truncates.
+	 * @throws DomainException When the text is not valid UTF-8.
 	 */
 	private static function code_point_length( string $text ): int {
-		if ( null === self::$has_mbstring ) {
-			self::$has_mbstring = function_exists( 'mb_strlen' );
+		if ( null === self::$mbstring_override ) {
+			if ( null === self::$has_mbstring ) {
+				self::$has_mbstring = function_exists( 'mb_strlen' );
+			}
+
+			$use_mbstring = self::$has_mbstring;
+		} else {
+			$use_mbstring = self::$mbstring_override;
 		}
 
-		if ( self::$has_mbstring ) {
-			return (int) mb_strlen( $text, 'UTF-8' );
-		}
-
-		// Deterministic UTF-8 validation without mbstring (PCRE
-		// is compiled with UTF-8 support in every stock PHP build).
-		if ( 0 === preg_match( '//u', $text ) ) {
+		// Strict UTF-8 well-formedness check — identical in both
+		// environments, before any counting (SF-002.2 §1/§2).
+		if ( 1 !== preg_match( '//u', $text ) ) {
 			throw new DomainException( 'State text must be valid UTF-8.' );
+		}
+
+		if ( $use_mbstring ) {
+			return (int) mb_strlen( $text, 'UTF-8' );
 		}
 
 		// Valid UTF-8: the number of code points equals the number of

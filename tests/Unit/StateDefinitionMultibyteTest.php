@@ -121,59 +121,109 @@ final class StateDefinitionMultibyteTest extends TestCase {
 	}
 
 	/**
-	 * Invalid UTF-8 in a merchant-facing field is handled deterministically
-	 * in both mbstring and fallback environments (SF-002.1 §2):
-	 *
-	 * - with mbstring: mb_strlen substitutes malformed sequences one-per-
-	 *   unit, so the length never shrinks below the raw byte count —
-	 *   over-length garbage still fails, and valid text is measured right.
-	 * - without mbstring: invalid UTF-8 throws DomainException explicitly.
-	 *
-	 * Either way there is no silent truncation; a lone 0xC3 0x28 sequence
-	 * counts >= 2 units on mbstring and is rejected on the fallback.
+	 * Invalid UTF-8 is REJECTED deterministically in BOTH counting
+	 * environments — via StateDefinition::create(), with no branching on
+	 * environment (SF-002.2 §1/§2/§3). Validation happens before any
+	 * counting: preg_match('//u') is a strict well-formedness check on
+	 * every stock PHP build, shared by both paths.
 	 *
 	 * @return void
 	 */
-	public function test_invalid_utf8_is_never_silently_shortened(): void {
-		// 0xC3 followed by 0x28 is an invalid UTF-8 sequence.
-		$invalid = "Selling \xC3\x28 rest";
+	public function test_invalid_utf8_is_rejected_on_mbstring_path(): void {
+		StateDefinition::$mbstring_override = true;
 
-		if ( function_exists( 'mb_strlen' ) ) {
-			// mbstring path: malformed bytes still count (>= byte/2 floor);
-			// the important property is that the result can NEVER be zero
-			// or fewer than the number of malformed sequences.
-			$length = mb_strlen( $invalid, 'UTF-8' );
+		$this->expectException( DomainException::class );
 
-			$this->assertGreaterThanOrEqual( 2, $length, 'Malformed sequences must never collapse to an empty string.' );
-		} else {
-			$this->expectException( DomainException::class );
-			StateDefinition::create( StateKey::from_string( 'a1' ), $invalid );
+		try {
+			StateDefinition::create(
+				StateKey::from_string( 'a1' ),
+				"Selling \xC3\x28 rest" // 0xC3 followed by 0x28: invalid UTF-8.
+			);
+		} finally {
+			StateDefinition::$mbstring_override = null;
 		}
 	}
 
 	/**
-	 * The known-invalid byte sequence still violates the length contract
-	 * when repeated past the limit — in both environments.
+	 * The same rejection on the no-mbstring fallback path — the seam
+	 * proves the fallback branch is genuinely exercised (SF-002.2 §4).
 	 *
 	 * @return void
 	 */
-	public function test_invalid_utf8_repeated_still_enforces_bounds(): void {
-		$invalid = str_repeat( "\xC3\x28", 500 ); // >= 500 malformed pairs.
+	public function test_invalid_utf8_is_rejected_on_fallback_path(): void {
+		StateDefinition::$mbstring_override = false;
 
-		if ( function_exists( 'mb_strlen' ) ) {
-			// mbstring: each malformed byte pair reports >= 1 unit; 500
-			// pairs => >= 500 code points for the name -> over 191 bound?
-			// mb_strlen reports exactly 500 here (one code point per
-			// malformed sequence) -> 500 > 191, must throw.
-			try {
-				StateDefinition::create( StateKey::from_string( 'a1' ), $invalid );
-				$this->fail( 'Over-length invalid input must be rejected.' );
-			} catch ( DomainException $e ) {
-				$this->assertStringContainsStringIgnoringCase( 'length', $e->getMessage() );
-			}
-		} else {
+		$this->expectException( DomainException::class );
+
+		try {
+			StateDefinition::create(
+				StateKey::from_string( 'a1' ),
+				"Selling \xC3\x28 rest"
+			);
+		} finally {
+			StateDefinition::$mbstring_override = null;
+		}
+	}
+
+	/**
+	 * Over-length invalid UTF-8 is still rejected (repeated garbage well
+	 * past the 191-character bound) — on the mbstring path.
+	 *
+	 * @return void
+	 */
+	public function test_invalid_utf8_repeated_is_rejected_on_mbstring_path(): void {
+		StateDefinition::$mbstring_override = true;
+
+		$this->expectException( DomainException::class );
+
+		try {
+			StateDefinition::create(
+				StateKey::from_string( 'a1' ),
+				str_repeat( "\xC3\x28", 500 )
+			);
+		} finally {
+			StateDefinition::$mbstring_override = null;
+		}
+	}
+
+	/**
+	 * The fallback counting path produces exact code-point counts on
+	 * valid Persian text — proving the seam-exercised fallback is correct,
+	 * not just present (SF-002.2 §4).
+	 *
+	 * @return void
+	 */
+	public function test_fallback_path_counts_persian_code_points_exactly(): void {
+		StateDefinition::$mbstring_override = false;
+
+		try {
+			$d = StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( 'ف', 191 ) );
+
+			$this->assertSame( 191, mb_strlen( $d->name(), 'UTF-8' ) );
+
+			// One more code point must fail on the same path.
 			$this->expectException( DomainException::class );
-			StateDefinition::create( StateKey::from_string( 'a1' ), $invalid );
+			StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( 'ف', 192 ) );
+		} finally {
+			StateDefinition::$mbstring_override = null;
+		}
+	}
+
+	/**
+	 * The mbstring counting path produces exact code-point counts on
+	 * valid Persian text as well (both counting paths agree).
+	 *
+	 * @return void
+	 */
+	public function test_mbstring_path_counts_persian_code_points_exactly(): void {
+		StateDefinition::$mbstring_override = true;
+
+		try {
+			$d = StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( 'ف', 191 ) );
+
+			$this->assertSame( 191, mb_strlen( $d->name(), 'UTF-8' ) );
+		} finally {
+			StateDefinition::$mbstring_override = null;
 		}
 	}
 }
