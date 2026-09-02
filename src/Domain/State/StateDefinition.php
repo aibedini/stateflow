@@ -35,70 +35,48 @@ final class StateDefinition {
 	public const MAX_DESCRIPTION_LENGTH = 1000;
 
 	/**
-	 * Whether mbstring is available (checked once).
-	 *
-	 * @var bool|null
-	 */
-	private static ?bool $has_mbstring = null;
-
-	/**
-	 * Test seam: forces the mbstring-availability decision. Null = auto-
-	 * detect (production). Tests set true/false to exercise both counting
-	 * paths deterministically. Production code never writes this.
-	 *
-	 * @var bool|null
-	 */
-	public static ?bool $mbstring_override = null;
-
-	/**
 	 * Unicode-aware length in code points, with ONE deterministic UTF-8
-	 * validation step shared by BOTH environments (SF-002.2):
+	 * validation step shared by BOTH environments (SF-002.3):
 	 *
 	 * - validation: preg_match('//u') is a strict UTF-8 well-formedness
-	 *   check on every stock PHP build; invalid input throws
-	 *   DomainException — identically whether or not mbstring is loaded.
-	 *   No silent substitution, no silent truncation.
-	 * - counting: mb_strlen(…, 'UTF-8') when mbstring is available, else
-	 *   an exact lead-byte count (on valid UTF-8 this equals the
-	 *   code-point count).
+	 *   check; invalid input throws DomainException — identically with or
+	 *   without mbstring. No silent substitution, no silent truncation.
+	 * - counting: exact lead-byte count (equals the code-point count on
+	 *   valid UTF-8).
 	 *
 	 * @param string $text UTF-8 text.
 	 * @return int Number of Unicode code points.
 	 * @throws DomainException When the text is not valid UTF-8.
 	 */
 	private static function code_point_length( string $text ): int {
-		if ( null === self::$mbstring_override ) {
-			if ( null === self::$has_mbstring ) {
-				self::$has_mbstring = function_exists( 'mb_strlen' );
-			}
-
-			$use_mbstring = self::$has_mbstring;
-		} else {
-			$use_mbstring = self::$mbstring_override;
-		}
-
 		// Strict UTF-8 well-formedness check — identical in both
-		// environments, before any counting (SF-002.2 §1/§2).
+		// environments, before any counting (SF-002.3 §1).
 		if ( 1 !== preg_match( '//u', $text ) ) {
 			throw new DomainException( 'State text must be valid UTF-8.' );
 		}
 
-		if ( $use_mbstring ) {
-			return (int) mb_strlen( $text, 'UTF-8' );
-		}
+		// Valid UTF-8: walk the sequences, deriving each sequence length from
+		// its lead-byte pattern (1/2/3/4-byte forms). The validation above
+		// guarantees well-formedness, so each step lands on a lead byte.
+		$count    = 0;
+		$bytes    = strlen( $text );
+		$position = 0;
 
-		// Valid UTF-8: the number of code points equals the number of
-		// non-continuation (lead) bytes.
-		$count = 0;
-		$bytes = strlen( $text );
+		while ( $position < $bytes ) {
+			$byte = ord( $text[ $position ] );
 
-		for ( $i = 0; $i < $bytes; $i++ ) {
-			$byte = ord( $text[ $i ] );
-
-			if ( 0xC0 !== ( $byte & 0xC0 ) ) {
-				// Not a continuation byte (10xxxxxx): a lead byte.
-				++$count;
+			if ( 0xF0 === ( $byte & 0xF8 ) ) {
+				$sequence_length = 4;
+			} elseif ( 0xE0 === ( $byte & 0xF0 ) ) {
+				$sequence_length = 3;
+			} elseif ( 0xC0 === ( $byte & 0xE0 ) ) {
+				$sequence_length = 2;
+			} else {
+				$sequence_length = 1;
 			}
+
+			$position += $sequence_length;
+			++$count;
 		}
 
 		return $count;

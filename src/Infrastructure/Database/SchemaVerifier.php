@@ -151,8 +151,16 @@ final class SchemaVerifier {
 				continue;
 			}
 
-			if ( $unique && 0 !== (int) ( $indexes[ $index_name ]['Non_unique'] ?? '1' ) ) {
-				$errors[] = sprintf( 'Table %s index %s must be UNIQUE', $actual, $index_name );
+			// Bidirectional uniqueness contract (SF-002.3 §2): the actual
+			// uniqueness flag must EQUAL the expected flag in both
+			// directions — expected-UNIQUE-but-plain and expected-plain-
+			// but-UNIQUE are both verification failures.
+			$actual_unique = 0 === (int) ( $indexes[ $index_name ]['Non_unique'] ?? '1' );
+
+			if ( $unique !== $actual_unique ) {
+				$errors[] = $unique
+					? sprintf( 'Table %s index %s must be UNIQUE', $actual, $index_name )
+					: sprintf( 'Table %s index %s must NOT be UNIQUE', $actual, $index_name );
 			}
 
 			$actual_columns = $this->index_columns( $indexes[ $index_name ] );

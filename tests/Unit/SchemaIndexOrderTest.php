@@ -135,11 +135,12 @@ final class SchemaIndexOrderTest extends TestCase {
 	}
 
 	/**
-	 * Wrong uniqueness is rejected.
+	 * Wrong uniqueness is rejected — direction 1: expected UNIQUE,
+	 * actual non-unique.
 	 *
 	 * @return void
 	 */
-	public function test_wrong_uniqueness_is_rejected(): void {
+	public function test_expected_unique_actual_non_unique_is_rejected(): void {
 		$indexes = $this->states_snapshot(
 			array( 'id' ),
 			array( 'state_key' ),
@@ -153,6 +154,82 @@ final class SchemaIndexOrderTest extends TestCase {
 
 		$this->assertNotEmpty( $errors );
 		$this->assertStringContainsString( 'must be UNIQUE', implode( "\n", $errors ) );
+	}
+
+	/**
+	 * Wrong uniqueness is rejected — direction 2 (SF-002.3 §2): expected
+	 * non-unique, actual UNIQUE. A unique enabled_sort would silently
+	 * forbid two enabled states sharing a sort order, so over-uniqueness
+	 * is equally a contract violation.
+	 *
+	 * @return void
+	 */
+	public function test_expected_non_unique_actual_unique_is_rejected(): void {
+		$indexes = $this->states_snapshot(
+			array( 'id' ),
+			array( 'state_key' ),
+			array( 'is_enabled', 'sort_order', 'id' )
+		);
+
+		// enabled_sort must NOT be UNIQUE: mark it unique.
+		$indexes['enabled_sort']['Non_unique'] = '0';
+
+		$errors = $this->verifier->verify_snapshot( $this->states_columns(), $indexes );
+
+		$this->assertNotEmpty( $errors );
+		$this->assertStringContainsString( 'must NOT be UNIQUE', implode( "\n", $errors ) );
+		$this->assertStringContainsString( 'enabled_sort', implode( "\n", $errors ) );
+	}
+
+	/**
+	 * The same over-uniqueness rejection applies to the assignments
+	 * table's state_object index.
+	 *
+	 * @return void
+	 */
+	public function test_state_object_over_uniqueness_is_rejected(): void {
+		$indexes = array(
+			'PRIMARY'      => $this->index_row( 'PRIMARY', true, array( 'object_id' ) ),
+			'state_object' => $this->index_row( 'state_object', false, array( 'state_id', 'object_id' ) ),
+		);
+
+		// state_object must NOT be UNIQUE: mark it unique.
+		$indexes['state_object']['Non_unique'] = '0';
+
+		$errors = $this->verifier->verify_snapshot(
+			$this->assignments_columns(),
+			$indexes,
+			TableNames::ASSIGNMENTS
+		);
+
+		$this->assertNotEmpty( $errors );
+		$this->assertStringContainsString( 'state_object', implode( "\n", $errors ) );
+		$this->assertStringContainsString( 'must NOT be UNIQUE', implode( "\n", $errors ) );
+	}
+
+	/**
+	 * Uniqueness is verified per-direction on both flagged indexes at
+	 * once: a snapshot with BOTH directions violated reports both errors.
+	 *
+	 * @return void
+	 */
+	public function test_both_uniqueness_directions_violated_report_both(): void {
+		$indexes = $this->states_snapshot(
+			array( 'id' ),
+			array( 'state_key' ),
+			array( 'is_enabled', 'sort_order', 'id' )
+		);
+
+		$indexes['state_key']['Non_unique']    = '1'; // Expected unique -> non-unique.
+		$indexes['enabled_sort']['Non_unique'] = '0'; // Expected non-unique -> unique.
+
+		$errors = $this->verifier->verify_snapshot( $this->states_columns(), $indexes );
+
+		$joined = implode( "\n", $errors );
+
+		$this->assertStringContainsString( 'state_key', $errors[0] ?? '' );
+		$this->assertStringContainsString( 'must be UNIQUE', $joined );
+		$this->assertStringContainsString( 'must NOT be UNIQUE', $joined );
 	}
 
 	/**

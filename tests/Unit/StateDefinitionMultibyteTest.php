@@ -1,9 +1,12 @@
 <?php
 /**
- * StateDefinition multibyte length tests (SF-002.1 §2).
+ * StateDefinition multibyte length tests (SF-002.1 §2, SF-002.3 §1).
  *
  * Persian/multibyte strings are counted in Unicode code points, not UTF-8
- * bytes. Pure domain: no WordPress bootstrap.
+ * bytes. One deterministic implementation: strict preg_match('//u')
+ * validation (malformed UTF-8 rejected) + exact lead-byte counting on
+ * valid UTF-8. Pure domain: no WordPress bootstrap, no test seams, no
+ * mutation of production static state.
  *
  * @package StateFlow\Tests\Unit
  */
@@ -80,7 +83,37 @@ final class StateDefinitionMultibyteTest extends TestCase {
 	}
 
 	/**
-	 * Mixed Persian/Latin/emoji content is measured in code points.
+	 * 3-byte code points (CJK) count exactly: 191 CJK characters are
+	 * valid, 192 are rejected.
+	 *
+	 * @return void
+	 */
+	public function test_three_byte_code_points_are_counted_exactly(): void {
+		$d = StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( '售', 191 ) );
+
+		$this->assertSame( 191, mb_strlen( $d->name(), 'UTF-8' ) );
+
+		$this->expectException( DomainException::class );
+		StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( '售', 192 ) );
+	}
+
+	/**
+	 * 4-byte code points (outside the BMP, e.g. emoji) count exactly: 191
+	 * are valid, 192 are rejected.
+	 *
+	 * @return void
+	 */
+	public function test_four_byte_code_points_are_counted_exactly(): void {
+		$d = StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( '𝕏', 191 ) );
+
+		$this->assertSame( 191, mb_strlen( $d->name(), 'UTF-8' ) );
+
+		$this->expectException( DomainException::class );
+		StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( '𝕏', 192 ) );
+	}
+
+	/**
+	 * Mixed Persian/Latin content is measured in code points.
 	 *
 	 * @return void
 	 */
@@ -121,109 +154,75 @@ final class StateDefinitionMultibyteTest extends TestCase {
 	}
 
 	/**
-	 * Invalid UTF-8 is REJECTED deterministically in BOTH counting
-	 * environments — via StateDefinition::create(), with no branching on
-	 * environment (SF-002.2 §1/§2/§3). Validation happens before any
-	 * counting: preg_match('//u') is a strict well-formedness check on
-	 * every stock PHP build, shared by both paths.
+	 * Invalid UTF-8 in a merchant-facing field is rejected explicitly —
+	 * never silently truncated, substituted or re-encoded (SF-002.2/§2.3).
+	 * The single shared validation step runs before counting, so this
+	 * test is environment-independent by construction.
 	 *
 	 * @return void
 	 */
-	public function test_invalid_utf8_is_rejected_on_mbstring_path(): void {
-		StateDefinition::$mbstring_override = true;
-
+	public function test_invalid_utf8_is_rejected(): void {
 		$this->expectException( DomainException::class );
 
-		try {
-			StateDefinition::create(
-				StateKey::from_string( 'a1' ),
-				"Selling \xC3\x28 rest" // 0xC3 followed by 0x28: invalid UTF-8.
-			);
-		} finally {
-			StateDefinition::$mbstring_override = null;
-		}
+		StateDefinition::create(
+			StateKey::from_string( 'a1' ),
+			"Selling \xC3\x28 rest" // 0xC3 followed by 0x28: invalid UTF-8.
+		);
 	}
 
 	/**
-	 * The same rejection on the no-mbstring fallback path — the seam
-	 * proves the fallback branch is genuinely exercised (SF-002.2 §4).
+	 * The same rejection for descriptions.
 	 *
 	 * @return void
 	 */
-	public function test_invalid_utf8_is_rejected_on_fallback_path(): void {
-		StateDefinition::$mbstring_override = false;
-
+	public function test_invalid_utf8_description_is_rejected(): void {
 		$this->expectException( DomainException::class );
 
-		try {
-			StateDefinition::create(
-				StateKey::from_string( 'a1' ),
-				"Selling \xC3\x28 rest"
-			);
-		} finally {
-			StateDefinition::$mbstring_override = null;
-		}
+		StateDefinition::create(
+			StateKey::from_string( 'a1' ),
+			'A',
+			"توضیح \xB1\x21 invalid" // Lone continuation byte 0xB1: invalid UTF-8.
+		);
 	}
 
 	/**
-	 * Over-length invalid UTF-8 is still rejected (repeated garbage well
-	 * past the 191-character bound) — on the mbstring path.
+	 * Over-length invalid UTF-8 (repeated malformed pairs, far past the
+	 * 191-character bound) is rejected by the validation step — regardless
+	 * of what any counter would have reported.
 	 *
 	 * @return void
 	 */
-	public function test_invalid_utf8_repeated_is_rejected_on_mbstring_path(): void {
-		StateDefinition::$mbstring_override = true;
-
+	public function test_invalid_utf8_repeated_is_rejected(): void {
 		$this->expectException( DomainException::class );
 
-		try {
-			StateDefinition::create(
-				StateKey::from_string( 'a1' ),
-				str_repeat( "\xC3\x28", 500 )
-			);
-		} finally {
-			StateDefinition::$mbstring_override = null;
-		}
+		StateDefinition::create(
+			StateKey::from_string( 'a1' ),
+			str_repeat( "\xC3\x28", 500 )
+		);
 	}
 
 	/**
-	 * The fallback counting path produces exact code-point counts on
-	 * valid Persian text — proving the seam-exercised fallback is correct,
-	 * not just present (SF-002.2 §4).
+	 * No test-only mutable production state exists on the domain object.
 	 *
 	 * @return void
 	 */
-	public function test_fallback_path_counts_persian_code_points_exactly(): void {
-		StateDefinition::$mbstring_override = false;
+	public function test_no_mutable_test_seam_exists(): void {
+		$reflection = new \ReflectionClass( StateDefinition::class );
 
-		try {
-			$d = StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( 'ف', 191 ) );
+		$static_props = $reflection->getProperties(
+			\ReflectionProperty::IS_STATIC | \ReflectionProperty::IS_PUBLIC | \ReflectionProperty::IS_PROTECTED
+		);
 
-			$this->assertSame( 191, mb_strlen( $d->name(), 'UTF-8' ) );
+		$names = array();
 
-			// One more code point must fail on the same path.
-			$this->expectException( DomainException::class );
-			StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( 'ف', 192 ) );
-		} finally {
-			StateDefinition::$mbstring_override = null;
+		foreach ( $static_props as $property ) {
+			$names[] = $property->getName();
 		}
-	}
 
-	/**
-	 * The mbstring counting path produces exact code-point counts on
-	 * valid Persian text as well (both counting paths agree).
-	 *
-	 * @return void
-	 */
-	public function test_mbstring_path_counts_persian_code_points_exactly(): void {
-		StateDefinition::$mbstring_override = true;
-
-		try {
-			$d = StateDefinition::create( StateKey::from_string( 'a1' ), str_repeat( 'ف', 191 ) );
-
-			$this->assertSame( 191, mb_strlen( $d->name(), 'UTF-8' ) );
-		} finally {
-			StateDefinition::$mbstring_override = null;
-		}
+		$this->assertSame(
+			array(),
+			$names,
+			'StateDefinition must expose no mutable static test state.'
+		);
 	}
 }
