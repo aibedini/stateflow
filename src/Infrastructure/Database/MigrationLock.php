@@ -3,15 +3,15 @@
  * Lightweight StateFlow-owned migration lock.
  *
  * Prevents two concurrent requests from running the same migration at the
- * same time (SF-002 §15). Built on add_option() atomic-acquire semantics:
+ * same time (SF-002 §15). Safety properties, stated precisely (SF-002.1 §4):
  *
- * - unique random token per acquisition
- * - acquisition timestamp stored with the token
- * - option is NOT autoloaded (never a normal-request cost)
- * - finite stale timeout; stale locks are recovered safely
- * - release() deletes only when the stored token matches the owner's token
- * - migrations stay idempotent regardless (lock is an optimization, not
- *   the correctness guarantee)
+ * - initial acquisition uses atomic add_option() semantics
+ * - stale recovery (delete + re-add) can race and is NOT a single atomic
+ *   replace; only one successful add_option() owns the current lock after
+ *   a given vacancy
+ * - migrations remain idempotent, so contention after a race is harmless
+ * - release() deletes only the matching owned token
+ * - the option is NOT autoloaded; the stale timeout is finite
  *
  * @package StateFlow\Infrastructure\Database
  */
@@ -68,9 +68,10 @@ final class MigrationLock {
 			return false;
 		}
 
-		// Stale lock: recover by deleting and re-acquiring atomically. A
-		// race here is harmless — losing candidates simply retry on the
-		// next request and dbDelta is idempotent either way.
+		// Stale lock: recover by deleting and re-acquiring. This sequence
+		// can race — it is not a single atomic replace — but only one
+		// successful add_option() can own the current lock after the
+		// vacancy, and dbDelta is idempotent, so a lost race is harmless.
 		$this->force_delete();
 
 		if ( $this->try_add( $token ) ) {

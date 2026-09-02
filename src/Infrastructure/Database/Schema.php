@@ -130,35 +130,35 @@ CREATE TABLE {$names->assignments()} (
 
 	/**
 	 * Required indexes per table: index name => required attributes.
-	 * 'unique' => whether the index must be UNIQUE; 'first' => the column
-	 * that must lead a composite index (proves composite ordering).
+	 * 'unique' => whether the index must be UNIQUE; 'columns' => the exact
+	 * ordered column sequence (order and completeness are verified).
 	 *
-	 * @return array<string, array<string, array{unique: bool, first: string}>>
+	 * @return array<string, array<string, array{unique: bool, columns: array<int, string>}>>
 	 */
 	public static function required_indexes(): array {
 		return array(
 			TableNames::STATES      => array(
 				'PRIMARY'      => array(
-					'unique' => true,
-					'first'  => 'id',
+					'unique'  => true,
+					'columns' => array( 'id' ),
 				),
 				'state_key'    => array(
-					'unique' => true,
-					'first'  => 'state_key',
+					'unique'  => true,
+					'columns' => array( 'state_key' ),
 				),
 				'enabled_sort' => array(
-					'unique' => false,
-					'first'  => 'is_enabled',
+					'unique'  => false,
+					'columns' => array( 'is_enabled', 'sort_order', 'id' ),
 				),
 			),
 			TableNames::ASSIGNMENTS => array(
 				'PRIMARY'      => array(
-					'unique' => true,
-					'first'  => 'object_id',
+					'unique'  => true,
+					'columns' => array( 'object_id' ),
 				),
 				'state_object' => array(
-					'unique' => false,
-					'first'  => 'state_id',
+					'unique'  => false,
+					'columns' => array( 'state_id', 'object_id' ),
 				),
 			),
 		);

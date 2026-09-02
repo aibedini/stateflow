@@ -35,6 +35,62 @@ final class StateDefinition {
 	public const MAX_DESCRIPTION_LENGTH = 1000;
 
 	/**
+	 * Whether mbstring is available (checked once).
+	 *
+	 * @var bool|null
+	 */
+	private static ?bool $has_mbstring = null;
+
+	/**
+	 * Unicode-aware length in code points, with deterministic UTF-8
+	 * validation in BOTH environments (SF-002.1 §2):
+	 *
+	 * - mbstring: mb_strlen(…, 'UTF-8') counts code points; mb_strlen also
+	 *   substitutes U+FFFD for malformed sequences and reports them as one
+	 *   code point each, so invalid UTF-8 never shortens the count.
+	 * - no mbstring: preg_match('//u') first validates UTF-8 strictly and
+	 *   REJECTS invalid input deterministically (no silent munging); valid
+	 *   UTF-8 is then counted by its lead bytes, which equals the
+	 *   code-point count exactly.
+	 *
+	 * @param string $text UTF-8 text.
+	 * @return int Number of Unicode code points.
+	 * @throws DomainException When the text is not valid UTF-8 (mbstring
+	 *                         fallback path). Never silently truncates.
+	 */
+	private static function code_point_length( string $text ): int {
+		if ( null === self::$has_mbstring ) {
+			self::$has_mbstring = function_exists( 'mb_strlen' );
+		}
+
+		if ( self::$has_mbstring ) {
+			return (int) mb_strlen( $text, 'UTF-8' );
+		}
+
+		// Deterministic UTF-8 validation without mbstring (PCRE
+		// is compiled with UTF-8 support in every stock PHP build).
+		if ( 0 === preg_match( '//u', $text ) ) {
+			throw new DomainException( 'State text must be valid UTF-8.' );
+		}
+
+		// Valid UTF-8: the number of code points equals the number of
+		// non-continuation (lead) bytes.
+		$count = 0;
+		$bytes = strlen( $text );
+
+		for ( $i = 0; $i < $bytes; $i++ ) {
+			$byte = ord( $text[ $i ] );
+
+			if ( 0xC0 !== ( $byte & 0xC0 ) ) {
+				// Not a continuation byte (10xxxxxx): a lead byte.
+				++$count;
+			}
+		}
+
+		return $count;
+	}
+
+	/**
 	 * Sort order bounds (smallint unsigned column).
 	 *
 	 * @var int
@@ -154,13 +210,13 @@ final class StateDefinition {
 			throw new DomainException( 'State name must not be empty.' );
 		}
 
-		if ( strlen( $name ) > self::MAX_NAME_LENGTH ) {
+		if ( self::code_point_length( $name ) > self::MAX_NAME_LENGTH ) {
 			throw new DomainException( 'State name exceeds the maximum allowed length.' );
 		}
 
 		$description = trim( $description );
 
-		if ( strlen( $description ) > self::MAX_DESCRIPTION_LENGTH ) {
+		if ( self::code_point_length( $description ) > self::MAX_DESCRIPTION_LENGTH ) {
 			throw new DomainException( 'State description exceeds the maximum allowed length.' );
 		}
 

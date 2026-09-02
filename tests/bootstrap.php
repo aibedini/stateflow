@@ -23,9 +23,90 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once dirname( __DIR__ ) . '/vendor/autoload.php';
 require_once __DIR__ . '/stubs/FeaturesUtil.php';
+require_once __DIR__ . '/stubs/wpdb.php';
 require_once __DIR__ . '/Harness.php';
 
-$GLOBALS['sf_hooks'] = array();
+$GLOBALS['sf_hooks']   = array();
+$GLOBALS['sf_options'] = array();
+
+/**
+ * Stub of get_option(): reads the sf_options global (autoload simulation
+ * is the caller's concern; all reads here come from the live map).
+ *
+ * @param string $option         Option name.
+ * @param mixed  $fallback_value Value when absent.
+ * @return mixed
+ */
+function get_option( string $option, $fallback_value = false ) {
+	$options = is_array( $GLOBALS['sf_options'] ?? null ) ? $GLOBALS['sf_options'] : array();
+
+	return array_key_exists( $option, $options ) ? $options[ $option ] : $fallback_value;
+}
+
+/**
+ * Stub of add_option(): atomic-create semantics — fails when the option
+ * already exists (this is the property the migration lock relies on).
+ *
+ * @param string $option   Option name.
+ * @param mixed  $value    Value.
+ * @param string $deprecated Unused.
+ * @param mixed  $autoload Autoload flag (recorded; unused by the harness).
+ * @return bool
+ */
+function add_option( string $option, $value, string $deprecated = '', $autoload = null ): bool {
+	unset( $deprecated, $autoload );
+
+	$options = is_array( $GLOBALS['sf_options'] ?? null ) ? $GLOBALS['sf_options'] : array();
+
+	if ( array_key_exists( $option, $options ) ) {
+		return false;
+	}
+
+	$options[ $option ] = $value;
+
+	$GLOBALS['sf_options'] = $options;
+
+	return true;
+}
+
+/**
+ * Stub of update_option(): overwrites any existing option.
+ *
+ * @param string $option Option name.
+ * @param mixed  $value  Value.
+ * @param mixed  $unused Unused.
+ * @return bool
+ */
+function update_option( string $option, $value, $unused = null ): bool {
+	unset( $unused );
+
+	$options            = is_array( $GLOBALS['sf_options'] ?? null ) ? $GLOBALS['sf_options'] : array();
+	$options[ $option ] = $value;
+
+	$GLOBALS['sf_options'] = $options;
+
+	return true;
+}
+
+/**
+ * Stub of delete_option().
+ *
+ * @param string $option Option name.
+ * @return bool
+ */
+function delete_option( string $option ): bool {
+	$options = is_array( $GLOBALS['sf_options'] ?? null ) ? $GLOBALS['sf_options'] : array();
+
+	if ( ! array_key_exists( $option, $options ) ) {
+		return false;
+	}
+
+	unset( $options[ $option ] );
+
+	$GLOBALS['sf_options'] = $options;
+
+	return true;
+}
 
 /**
  * Record a callback on a hook.

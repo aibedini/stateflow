@@ -56,10 +56,49 @@ final class SchemaVerifier {
 		$errors = array();
 
 		foreach ( $this->tables() as $logical => $actual ) {
-			$errors = array_merge( $errors, $this->verify_table( $logical, $actual ) );
+			$columns = $this->columns( $actual );
+
+			if ( null === $columns ) {
+				$errors[] = sprintf( 'Missing table: %s', $actual );
+
+				continue;
+			}
+
+			$errors = array_merge(
+				$errors,
+				$this->check_table(
+					$logical,
+					$actual,
+					$columns,
+					$this->indexes( $actual ),
+					Schema::required_indexes()[ $logical ] ?? array(),
+					Schema::required_columns()[ $logical ] ?? array()
+				)
+			);
 		}
 
 		return $errors;
+	}
+
+	/**
+	 * Unit-testable structural seam: run the verification logic against a
+	 * caller-provided columns/indexes snapshot (as captured from the live
+	 * database by columns()/indexes()). No database is touched.
+	 *
+	 * @param array<string, array<string, string>> $columns Column rows keyed by name (null-ish table absence is expressed by an empty outer array()).
+	 * @param array<string, array<string, string>> $indexes Index rows keyed by name.
+	 * @param string                               $logical Logical table name (TableNames constant).
+	 * @return array<int, string>
+	 */
+	public function verify_snapshot( array $columns, array $indexes, string $logical = TableNames::STATES ): array {
+		return $this->check_table(
+			$logical,
+			TableNames::STATES === $logical ? TableNames::STATES : $logical,
+			$columns,
+			$indexes,
+			Schema::required_indexes()[ $logical ] ?? array(),
+			Schema::required_columns()[ $logical ] ?? array()
+		);
 	}
 
 	/**
@@ -75,25 +114,26 @@ final class SchemaVerifier {
 	}
 
 	/**
-	 * Verify one table's existence, columns and indexes.
+	 * Verify one table's existence, columns and indexes against the
+	 * required specification (full ordered column sequences).
 	 *
-	 * @param string $logical Logical table name (TableNames constant).
-	 * @param string $actual  Fully-qualified table name.
+	 * @param string                                                          $logical Logical table name (TableNames constant).
+	 * @param string                                                          $actual  Fully-qualified table name.
+	 * @param array<string, array<string, string>>                            $columns Column rows keyed by name.
+	 * @param array<string, array<string, string>>                            $indexes Index rows keyed by name (with per-index 'columns' sequence).
+	 * @param array<string, array{unique: bool, columns: array<int, string>}> $required Required index spec.
+	 * @param array<int, string>                                              $required_columns Required column names.
 	 * @return array<int, string>
 	 */
-	private function verify_table( string $logical, string $actual ): array {
+	private function check_table(
+		string $logical,
+		string $actual,
+		array $columns,
+		array $indexes,
+		array $required,
+		array $required_columns
+	): array {
 		$errors = array();
-
-		$required_columns = Schema::required_columns()[ $logical ] ?? array();
-		$required_indexes = Schema::required_indexes()[ $logical ] ?? array();
-
-		$columns = $this->columns( $actual );
-
-		if ( null === $columns ) {
-			return array( sprintf( 'Missing table: %s', $actual ) );
-		}
-
-		$indexes = $this->indexes( $actual );
 
 		foreach ( $required_columns as $column ) {
 			if ( ! array_key_exists( $column, $columns ) ) {
@@ -101,9 +141,9 @@ final class SchemaVerifier {
 			}
 		}
 
-		foreach ( $required_indexes as $index_name => $spec ) {
+		foreach ( $required as $index_name => $spec ) {
 			$unique = $spec['unique'];
-			$first  = $spec['first'];
+			$wanted = $spec['columns'];
 
 			if ( ! array_key_exists( $index_name, $indexes ) ) {
 				$errors[] = sprintf( 'Table %s is missing index %s', $actual, $index_name );
@@ -115,20 +155,49 @@ final class SchemaVerifier {
 				$errors[] = sprintf( 'Table %s index %s must be UNIQUE', $actual, $index_name );
 			}
 
-			$first_column = (string) ( $indexes[ $index_name ]['first_column'] ?? '' );
+			$actual_columns = $this->index_columns( $indexes[ $index_name ] );
 
-			if ( $first !== $first_column ) {
+			if ( $wanted !== $actual_columns ) {
 				$errors[] = sprintf(
-					'Table %s index %s must lead with column %s (found %s)',
+					'Table %s index %s must cover columns [%s] in order (found [%s])',
 					$actual,
 					$index_name,
-					$first,
-					'' === $first_column ? '(none)' : $first_column
+					implode( ', ', $wanted ),
+					implode( ', ', $actual_columns )
 				);
 			}
 		}
 
 		return $errors;
+	}
+
+	/**
+	 * The ordered column sequence of one index, from its SHOW INDEX rows
+	 * (Seq_in_index 1..n preserved in the row map).
+	 *
+	 * @param array<string, string> $index_row Aggregated index row.
+	 * @return array<int, string>
+	 */
+	private function index_columns( array $index_row ): array {
+		$columns = array();
+
+		foreach ( $index_row as $key => $value ) {
+			if ( ! is_string( $key ) || ! str_starts_with( $key, 'column_' ) ) {
+				continue;
+			}
+
+			$seq = (int) substr( $key, strlen( 'column_' ) );
+
+			if ( $seq < 1 ) {
+				continue;
+			}
+
+			$columns[ $seq ] = $value;
+		}
+
+		ksort( $columns );
+
+		return array_values( $columns );
 	}
 
 	/**
@@ -203,11 +272,13 @@ final class SchemaVerifier {
 			$name = $normalized['Key_name'];
 
 			if ( ! array_key_exists( $name, $indexes ) ) {
-				$indexes[ $name ] = $normalized + array( 'first_column' => '' );
+				$indexes[ $name ] = $normalized;
 			}
 
-			if ( '1' === ( $normalized['Seq_in_index'] ?? '' ) ) {
-				$indexes[ $name ]['first_column'] = $normalized['Column_name'] ?? '';
+			$seq = (int) ( $normalized['Seq_in_index'] ?? '0' );
+
+			if ( $seq >= 1 ) {
+				$indexes[ $name ][ 'column_' . $seq ] = $normalized['Column_name'] ?? '';
 			}
 		}
 

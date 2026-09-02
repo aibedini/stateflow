@@ -109,6 +109,11 @@ final class Plugin {
 	 * already-active plugin, so initialize() re-checks the schema and
 	 * safely ensures it is current before any product service registers.
 	 *
+	 * SF-002.1 §1 invariant: product services may register ONLY when
+	 * MigrationResult::is_success() is true. Two independent questions:
+	 * "should product services run?" (gated below) and "should an admin
+	 * error notice be shown?" (only on verified migration failure).
+	 *
 	 * @return void
 	 */
 	public function initialize(): void {
@@ -122,17 +127,50 @@ final class Plugin {
 
 		$result = $this->ensure_schema();
 
-		if ( ! $result->is_success() && ! $result->was_locked() && ! $result->was_db_unavailable() ) {
-			// Verified migration failure: one concise capability-gated
-			// admin notice; product services stay disabled (SF-002 §16).
-			$this->schema_error_notice->register();
+		if ( ! self::services_may_register( $result ) ) {
+			// Any non-success outcome keeps product services OFF for this
+			// request. The notice decision is separate:
+			// - locked / db-unavailable: transient contention or harness
+			// conditions; normal WooCommerce behavior wins, no scary
+			// merchant error notice.
+			// - verified migration failure: one concise capability-gated
+			// error notice (SF-002 §16).
+			if ( self::should_show_schema_error_notice( $result ) ) {
+				$this->schema_error_notice->register();
+			}
 
 			return;
 		}
 
 		// Service registration point for SF-003 and later tickets. Reached
-		// only when the schema is current (or a concurrent migration holds
-		// the lock; that request retries on its next initialize()).
+		// ONLY with is_success() === true (success covers the already-
+		// current fast path), i.e. the schema is verified current.
+	}
+
+	/**
+	 * SF-002.1 §1 invariant, made explicit and unit-testable: product
+	 * services may register only when the migration outcome is a success
+	 * (which covers the already-current fast path).
+	 *
+	 * @param MigrationResult $result Migration outcome.
+	 * @return bool
+	 */
+	public static function services_may_register( MigrationResult $result ): bool {
+		return $result->is_success();
+	}
+
+	/**
+	 * Whether a schema error notice should be shown: only on a verified
+	 * migration failure — never for transient lock contention or a missing
+	 * database layer.
+	 *
+	 * @param MigrationResult $result Migration outcome.
+	 * @return bool
+	 */
+	public static function should_show_schema_error_notice( MigrationResult $result ): bool {
+		return ! $result->is_success()
+			&& ! $result->was_locked()
+			&& ! $result->was_db_unavailable();
 	}
 
 	/**
