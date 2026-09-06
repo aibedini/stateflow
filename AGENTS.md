@@ -1,6 +1,6 @@
 # AGENTS.md — StateFlow
 
-WordPress/WooCommerce plugin. StateFlow adds an explainable sales-state layer to WooCommerce products and variations without mutating their canonical price or inventory data. Currently at SF-002.3 — persistence foundation complete and frozen.
+WordPress/WooCommerce plugin. StateFlow adds an explainable sales-state layer to WooCommerce products and variations without mutating their canonical price or inventory data. Currently at SF-003A — repository read layer complete; persistence schema remains frozen.
 
 ## Environment
 

@@ -65,14 +65,24 @@
 
 	<!-- Schema inspection/migration code touches StateFlow-owned tables
 		 directly by design (DESCRIBE/SHOW INDEX/dbDelta in the verifier,
-		 migration fixtures in tests). These are structural operations on
-		 trusted TableNames-resolved identifiers, not app-data queries; the
-		 direct-query sniff targets unprepared app-data access on shared
-		 tables. Repository-style data access arrives in later tickets and
-		 will go through the normal caching-aware paths. -->
+		 migration fixtures in tests). SF-003A read repositories are the
+		 intended data-access path over StateFlow-owned tables: every value
+		 is $wpdb->prepare()d and table identifiers come from TableNames.
+		 These are internal StateFlow stores — not shared WP tables — so
+		 the app-data direct-query sniff does not apply. The prepared-IN
+		 warning is the dynamic bounded IN-list (batch size 500); WPCS
+		 cannot count placeholders built from count(), so the bounded
+		 repetition is documented here instead. -->
 	<rule ref="WordPress.DB.DirectDatabaseQuery">
 		<exclude-pattern>*/src/Infrastructure/Database/SchemaVerifier\.php</exclude-pattern>
+		<exclude-pattern>*/src/Infrastructure/Database/WpdbStateDefinitionRepository\.php</exclude-pattern>
+		<exclude-pattern>*/src/Infrastructure/Database/WpdbExplicitAssignmentRepository\.php</exclude-pattern>
 		<exclude-pattern>*/tests/Integration/PersistenceTest\.php</exclude-pattern>
+		<exclude-pattern>*/tests/Integration/RepositoryIntegrationTest\.php</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.DB.PreparedSQLPlaceholders">
+		<exclude-pattern>*/src/Infrastructure/Database/WpdbStateDefinitionRepository\.php</exclude-pattern>
+		<exclude-pattern>*/src/Infrastructure/Database/WpdbExplicitAssignmentRepository\.php</exclude-pattern>
 	</rule>
 
 	<arg name="extensions" value="php"/>

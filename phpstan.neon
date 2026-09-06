@@ -25,6 +25,9 @@ parameters:
 		- vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
 	ignoreErrors:
 		-
+			message: '#Access to static property \$\w+ on an unknown class StateFlow\\Tests\\ScriptedWpdb#'
+			path: tests/Unit/RepositoryContractTest.php
+		-
 			message: '#Access to an undefined static property Automattic\\WooCommerce\\Utilities\\FeaturesUtil::\$calls#'
 			path: tests
 	treatPhpDocTypesAsCertain: false

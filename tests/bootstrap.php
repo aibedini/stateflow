@@ -21,10 +21,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
 
+// wpdb ARRAY_A result mode (the repositories pass it to get_results()).
+if ( ! defined( 'ARRAY_A' ) ) {
+	define( 'ARRAY_A', 'ARRAY_A' );
+}
+
 require_once dirname( __DIR__ ) . '/vendor/autoload.php';
 require_once __DIR__ . '/stubs/FeaturesUtil.php';
 require_once __DIR__ . '/stubs/wpdb.php';
 require_once __DIR__ . '/Harness.php';
+
+// Readable alias for the scripted wpdb double (global -> aliased name).
+if ( ! class_exists( 'StateFlow\Tests\ScriptedWpdb' ) ) {
+	class_alias( 'wpdb', 'StateFlow\Tests\ScriptedWpdb' );
+}
 
 $GLOBALS['sf_hooks']   = array();
 $GLOBALS['sf_options'] = array();
