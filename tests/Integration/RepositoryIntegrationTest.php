@@ -119,7 +119,15 @@ final class RepositoryIntegrationTest extends WP_UnitTestCase {
 
 		$results = $this->state_repo()->find_by_ids( array( $inquiry_id, $selling_id, $hold_id ) );
 
-		$this->assertSame( array( $inquiry_id, $selling_id, $hold_id ), array_keys( $results ) );
+		// The contract keys the map by persistence ID and omits missing
+		// rows; row order is not part of the contract (batch SELECTs carry
+		// no ORDER BY), so compare the key SET, not its order.
+		$expected = array( $inquiry_id, $selling_id, $hold_id );
+		$actual   = array_keys( $results );
+		sort( $expected );
+		sort( $actual );
+
+		$this->assertSame( $expected, $actual );
 	}
 
 	/**
@@ -138,7 +146,12 @@ final class RepositoryIntegrationTest extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertSame( array( 'selling', 'inquiry' ), array_keys( $results ) );
+		// Map keys are the canonical key strings; row order is not part of
+		// the contract, so compare the key SET, not its order.
+		$actual = array_keys( $results );
+		sort( $actual );
+
+		$this->assertSame( array( 'inquiry', 'selling' ), $actual );
 	}
 
 	/**
@@ -171,7 +184,7 @@ final class RepositoryIntegrationTest extends WP_UnitTestCase {
 		$found = $this->state_repo()->find_by_key( StateKey::from_string( 'inactive' ) );
 
 		$this->assertNotNull( $found );
-		$this->assertFalse( $found->enabled() );
+		$this->assertFalse( $found->is_enabled() );
 	}
 
 	/**
@@ -185,7 +198,7 @@ final class RepositoryIntegrationTest extends WP_UnitTestCase {
 		$found = $this->state_repo()->find_by_key( StateKey::from_string( 'preorder' ) );
 
 		$this->assertNotNull( $found );
-		$this->assertTrue( $found->builtin() );
+		$this->assertTrue( $found->is_builtin() );
 	}
 
 	/**
